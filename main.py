@@ -10,6 +10,7 @@ from typing import Optional
 from pydantic import BaseModel
 from app_modules.models import get_db, Customers, Campaigns, TaskManger
 from app_modules import utils
+import logging
 
 
 app = FastAPI()
@@ -55,17 +56,23 @@ async def webhook(background_tasks: BackgroundTasks, db: Session= Depends(get_db
         )
     db.add(task_m)
     db.commit()
-    background_tasks.add_task(utils.sync_crm_data, task_id, db)
-    background_tasks.add_task(utils.sync_marketing_data, task_id, db)
+    logging.info("Adding background tasks")
+    try:
+        background_tasks.add_task(utils.sync_crm_data, task_id, db)
+        background_tasks.add_task(utils.sync_marketing_data, task_id, db)
+    except:
+        logging.error("Error while adding the background tasks in the webhook API")
     return {"status_code": 200,"message": "Sync started"}
 
 
 @app.get('/data')
 async def get_data(limit=10, offset=0, db: Session= Depends(get_db)):
+
     db_campaign_items = db.query(Campaigns).limit(limit).offset(offset)
     db_customer_items = db.query(Customers).limit(limit).offset(offset)
     all_items = []
     resp = DataResp()
+    logging.info("Fetched records from campaigns and customers tables")
     camps : List[CampaignsResp] = []
     customers: List[CustomersResp] = []
     customers = []
@@ -103,7 +110,10 @@ async def sync_data(source: str, background_tasks: BackgroundTasks, db: Session=
         )
         db.add(task_m)
         db.commit()
-        background_tasks.add_task(utils.sync_crm_data, task_id, db)
+        try:
+            background_tasks.add_task(utils.sync_crm_data, task_id, db)
+        except:
+            logging.error("Error while adding the background task in the sync crm api")
     elif source == "marketing":
         task_id = str(uuid4())
         task_m = TaskManger(
@@ -112,7 +122,10 @@ async def sync_data(source: str, background_tasks: BackgroundTasks, db: Session=
         )
         db.add(task_m)
         db.commit()
-        background_tasks.add_task(utils.sync_marketing_data, task_id, db)
+        try:
+            background_tasks.add_task(utils.sync_marketing_data, task_id, db)
+        except:
+            logging.error("Error while adding the background task in the sync crm api")
     else:
         raise HTTPException(status_code=404, detail="Source not found")
     return {"status_code": 200,"message": "Sync started"}
